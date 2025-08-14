@@ -1,0 +1,14 @@
+Django>=4.2
+djangorestframework
+requests
+python-dotenv
+python-decouple
+django-crispy-forms
+psycopg2-binary       # only if you plan to use PostgreSQL in development
+gunicorn              # for production WSGI
+whitenoise            # serve static files in prod simply
+django-environ        # optional alternative to python-dotenv / decouple
+python-dotenv
+django-cors-headers  # if you need to handle CORS
+dj-database-url
+django-redis
