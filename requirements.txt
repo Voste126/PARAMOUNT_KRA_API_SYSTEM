@@ -12,3 +12,4 @@ python-dotenv
 django-cors-headers  # if you need to handle CORS
 dj-database-url
 django-redis
+drf-yasg==1.21.6 

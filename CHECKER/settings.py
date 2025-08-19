@@ -15,6 +15,8 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 
+load_dotenv()
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")   # ensure python-dotenv is installed
 
@@ -22,13 +24,6 @@ load_dotenv(BASE_DIR / ".env")   # ensure python-dotenv is installed
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "unsafe-dev-key")
 DEBUG = os.getenv("DJANGO_DEBUG", "True") == "True"
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
-
-# KRA settings (fill the real token URL from developer.go.ke)
-KRA_CONSUMER_KEY = os.getenv("KRA_CONSUMER_KEY")
-KRA_CONSUMER_SECRET = os.getenv("KRA_CONSUMER_SECRET")
-KRA_TOKEN_URL = os.getenv("KRA_TOKEN_URL")           # e.g. https://sbx.developer.go.ke/oauth/token (get exact URL from portal)
-KRA_PIN_BY_PIN_URL = os.getenv("KRA_PIN_BY_PIN_URL", "https://sbx.kra.go.ke/checker/v1/pinbypin")
-
 
 
 
@@ -38,14 +33,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-3dz%vfo&p99q@5z=(@ue@5dq*e9=j$%nfjn1g2qgooc60f25%m'
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = []
 
 
 # Application definition
@@ -58,18 +45,24 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'drf_yasg',  # Swagger documentation
     'kra_api'
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # Add CORS middleware
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+# CORS settings
+CORS_ALLOW_ALL_ORIGINS = True  # For development only
+CORS_ALLOW_CREDENTIALS = True
 
 ROOT_URLCONF = 'CHECKER.urls'
 
@@ -142,3 +135,33 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# simple local in-memory cache (for production use Redis/memcached)
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "kra-tokens",
+    }
+}
+
+# Access credentials via env
+KRA_APPS = {
+    "app1": {
+        "consumer_key": os.getenv("KRA_APP1_CONSUMER_KEY"),
+        "consumer_secret": os.getenv("KRA_APP1_CONSUMER_SECRET"),
+        "token_url": "https://sbx.kra.go.ke/v1/token/generate",  # From PIN by PIN collection
+    },
+    "app2": {
+        "consumer_key": os.getenv("KRA_APP2_CONSUMER_KEY"),
+        "consumer_secret": os.getenv("KRA_APP2_CONSUMER_SECRET"),
+        "token_url": "https://sbx.kra.go.ke/oauth/v1/generate",  # From PIN by ID collection
+    },
+}
+
+# Base URLs for KRA endpoints
+KRA_BASE_URL = "https://sbx.kra.go.ke"
+KRA_PIN_BY_ID_URL = f"{KRA_BASE_URL}/checker/v1/pin"
+KRA_PIN_BY_PIN_URL = f"{KRA_BASE_URL}/checker/v1/pinbypin"
+KRA_PIN_BY_ID_URL = os.getenv("KRA_PIN_BY_ID_URL")
+KRA_PIN_BY_PIN_URL = os.getenv("KRA_PIN_BY_PIN_URL")

@@ -1,0 +1,143 @@
+import requests
+from django.conf import settings
+from django.core.cache import cache
+
+def fetch_kra_token(app_name, force_refresh=False):
+    """
+    Get a KRA OAuth token for the specified app, using cache if available.
+    
+    Args:
+        app_name (str): Which app's credentials to use ('app1' or 'app2')
+        force_refresh (bool): If True, ignore cached token and fetch new one
+    
+    Returns:
+        str: The access token
+    
+    Raises:
+        Exception: If token fetch fails
+    """
+    cache_key = f"kra_token_{app_name}"
+    
+    # Return cached token unless force_refresh
+    if not force_refresh:
+        token = cache.get(cache_key)
+        if token:
+            return token
+
+    # Get app credentials
+    app_config = settings.KRA_APPS.get(app_name)
+    if not app_config:
+        raise Exception(f"Invalid app selection: {app_name}")
+
+    # Try primary token URL first
+    try:
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        }
+        data = {
+            'grant_type': 'client_credentials',
+            'client_id': app_config["consumer_key"],
+            'client_secret': app_config["consumer_secret"]
+        }
+        
+        # Print request details for debugging
+        print(f"Making request to {settings.KRA_TOKEN_URL}")
+        print(f"Headers: {headers}")
+        print(f"Data: {data}")
+        
+        response = requests.post(
+            settings.KRA_TOKEN_URL,
+            headers=headers,
+            data=data,
+            verify=False  # For sandbox only
+        )
+        
+        # Print response details
+        print(f"Response status: {response.status_code}")
+        print(f"Response headers: {response.headers}")
+        print(f"Response text: {response.text}")
+        
+        if not response.ok and settings.KRA_TOKEN_URL_ALT:
+            print(f"Trying alternate URL: {settings.KRA_TOKEN_URL_ALT}")
+            response = requests.post(
+                settings.KRA_TOKEN_URL_ALT,
+                headers=headers,
+                data=data,
+                verify=False  # For sandbox only
+            )
+            print(f"Alternate response status: {response.status_code}")
+            print(f"Alternate response text: {response.text}")
+
+        if not response.ok:
+            raise Exception(f"Token request failed: {response.text}")
+
+        try:
+            # Try to parse as JSON first
+            try:
+                token_data = response.json()
+                access_token = token_data.get("access_token")
+            except ValueError:
+                # If not JSON, try parsing as plain text
+                access_token = response.text.strip()
+            
+            if not access_token:
+                raise Exception("No access token found in response")
+                
+            return access_token
+                
+        except Exception as e:
+            print(f"Error processing response: {str(e)}")
+            print(f"Response text: {response.text}")
+            raise Exception(f"Failed to get access token: {str(e)}")
+
+        # Cache token (expires in 1 hour)
+        cache.set(cache_key, access_token, timeout=3600)
+        return access_token
+
+    except requests.RequestException as e:
+        raise Exception(f"Token request failed: {str(e)}")
+
+
+def call_kra_endpoint(url, payload, app_name):
+    """
+    Call a KRA API endpoint with proper authentication.
+    
+    Args:
+        url (str): The full endpoint URL
+        payload (dict): The request body to send
+        app_name (str): Which app's token to use
+    
+    Returns:
+        dict: The JSON response from KRA
+        
+    Raises:
+        Exception: If the request fails
+    """
+    token = fetch_kra_token(app_name)
+    
+    try:
+        response = requests.post(
+            url,
+            json=payload,
+            headers={"Authorization": f"Bearer {token}"},
+            verify=False  # For sandbox only
+        )
+        
+        if not response.ok:
+            # If unauthorized, try once more with fresh token
+            if response.status_code == 401:
+                token = fetch_kra_token(app_name, force_refresh=True)
+                response = requests.post(
+                    url,
+                    json=payload,
+                    headers={"Authorization": f"Bearer {token}"},
+                    verify=False  # For sandbox only
+                )
+        
+        if not response.ok:
+            raise Exception(f"Request failed: {response.text}")
+            
+        return response.json()
+        
+    except requests.RequestException as e:
+        raise Exception(f"Request failed: {str(e)}")
